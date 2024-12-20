@@ -1,71 +1,58 @@
-import pandas as pd
-import re
-import emoji
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.metrics import classification_report
-from sklearn.utils import resample
-import tensorflow as tf
-from tensorflow.keras import layers, models
-from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
-import torch
+# univariate lstm example
+from numpy import array
+from keras.models import Sequential
+from keras.layers import LSTM
+from keras.layers import Dense
+
+# split a univariate sequence into samples
+def split_sequence(sequence, n_steps):
+    X, y = list(), list()
+    for i in range(len(sequence)):
+        # find the end of this pattern
+        end_ix = i + n_steps
+        # check if we are beyond the sequence
+        if end_ix > len(sequence) - 1:
+            break
+        # gather input and output parts of the pattern
+        seq_x, seq_y = sequence[i:end_ix], sequence[end_ix]
+        X.append(seq_x)
+        y.append(seq_y)
+    return array(X), array(y)
 
 
+# define input sequence
+raw_seq = [10, 20, 30, 40, 50, 60, 70, 80, 90]
 
+# choose a number of time steps
+n_steps = 3
 
+# split into samples
+X, y = split_sequence(raw_seq, n_steps)
 
-# Load dataset
-df = pd.read_csv('data/emotions.csv')
+# summarize the data
+print("summarize the data:", raw_seq)
+for i in range(len(X)):
+	print(X[i], y[i])
 
-# Perform EDA
-print("Missing Values:\n", df.isnull().sum())
-print("Duplicates:", df.duplicated().sum())
+# reshape from [samples, timesteps] into [samples, timesteps, features]
+n_features = 1
+X = X.reshape((X.shape[0], X.shape[1], n_features))
+print("samples:", X.shape[0])
+print("timesteps:", X.shape[1])
+print("n_features:", n_features)
 
-# Class distribution
-sns.countplot(x='label', data=df, palette="viridis")
-plt.title("Class Distribution of Emotions")
-plt.show()
+# define model
+model = Sequential()
+model.add(LSTM(50, activation='relu', input_shape=(n_steps, n_features)))
+model.add(Dense(1))
+model.compile(optimizer='adam', loss='mse')
 
-# Remove low-percentage category (e.g., category 5 if its count is very low)
-df = df[df['label'] != 5]
+# fit model
+model.fit(X, y, epochs=200, verbose=0)
 
-# Balance dataset by sampling 20k rows for each label
-balanced_data = pd.DataFrame()
-for label in df['label'].unique():
-    sampled_data = df[df['label'] == label].sample(n=20000, random_state=42)
-    balanced_data = pd.concat([balanced_data, sampled_data])
-
-# Check new class distribution
-sns.countplot(x='label', data=balanced_data, palette="viridis")
-plt.title("Balanced Class Distribution")
-plt.show()
-
-
-# Clean text
-def clean_text(text):
-    text = text.lower()
-    text = ''.join([char for char in text if char not in emoji.UNICODE_EMOJI_ENGLISH])
-    text = re.sub(r'[^a-z\s]', '', text)
-    return text
-
-balanced_data['cleaned_text'] = balanced_data['text'].apply(clean_text)
-
-
-# TF-IDF Vectorization
-tfidf_vectorizer = TfidfVectorizer(max_features=10000)
-X = tfidf_vectorizer.fit_transform(balanced_data['cleaned_text'])
-y = balanced_data['label']
-
-# Split into train and test sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-nb_model = MultinomialNB()
-nb_model.fit(X_train, y_train)
-y_pred = nb_model.predict(X_test)
-print("Naive Bayes Performance:\n", classification_report(y_test, y_pred))
+# demonstrate prediction
+range=[70, 80, 90]
+x_input = array(range)
+x_input = x_input.reshape((1, n_steps, n_features))
+yhat = model.predict(x_input, verbose=0)
+print("the next value in the sequence:",range, "  is ", yhat[0])
